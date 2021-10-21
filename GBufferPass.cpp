@@ -37,7 +37,7 @@ void GBufferPass::Resize(uint32_t width, uint32_t height)
 
     m_Fbo = Fbo::create2D(width, height, desc);
 
-    m_MotionTexture = Texture::create2D(width, height, ResourceFormat::RG32Float, 1U, 1U, nullptr, ResourceBindFlags::UnorderedAccess);
+    m_MotionTexture = Texture::create2D(width, height, ResourceFormat::RG32Float, 1U, 1U, nullptr, ResourceBindFlags::UnorderedAccess | ResourceBindFlags::ShaderResource);
     m_MotionTexture->setName("Motion Texture");
 
     m_InternalPreviousLinearZAndNormalRT = Texture::create2D(width, height, ResourceFormat::RGBA32Float, 1, 1, nullptr, Resource::BindFlags::RenderTarget | Resource::BindFlags::ShaderResource);
@@ -58,7 +58,7 @@ void GBufferPass::Execute(RenderContext* renderContext)
 
     const float4 clearColor(0.0f, 0.0f, 0.0f, 0.0f);
     renderContext->clearFbo(m_Fbo.get(), clearColor, 1.0f, 0, FboAttachmentType::Color);
-    renderContext->clearUAV(m_MotionTexture->getUAV().get(), float4(0.f));
+    //renderContext->clearUAV(m_MotionTexture->getUAV().get(), float4(0.f));
 
     m_DepthPass->Execute(renderContext);
     m_Fbo->attachDepthStencilTarget(m_DepthPass->GetDepthTexture());
