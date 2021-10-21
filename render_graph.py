@@ -36,8 +36,11 @@ def render_graph_DefaultRenderGraph():
     g.addPass(SimplePostFX, 'SimplePostFX')
     ToneMapper = createPass('ToneMapper', {'useSceneMetadata': True, 'exposureCompensation': 0.0, 'autoExposure': False, 'filmSpeed': 100.0, 'whiteBalance': False, 'whitePoint': 6500.0, 'operator': ToneMapOp.Aces, 'clamp': True, 'whiteMaxLuminance': 1.0, 'whiteScale': 11.199999809265137, 'fNumber': 1.0, 'shutter': 1.0, 'exposureMode': ExposureMode.AperturePriority})
     g.addPass(ToneMapper, 'ToneMapper')
-    g.addEdge('ReSTIRPass.output', 'SimplePostFX.src')
+    AccumulatePass = createPass('AccumulatePass', {'enabled': True, 'autoReset': True, 'precisionMode': AccumulatePrecision.Single, 'subFrameCount': 0, 'maxAccumulatedFrames': 0})
+    g.addPass(AccumulatePass, 'AccumulatePass')
     g.addEdge('SimplePostFX.dst', 'ToneMapper.src')
+    g.addEdge('ReSTIRPass.output', 'AccumulatePass.input')
+    g.addEdge('AccumulatePass.output', 'SimplePostFX.src')
     g.markOutput('ToneMapper.dst')
     return g
 

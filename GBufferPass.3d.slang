@@ -49,14 +49,18 @@ GBuffer psMain(VSOut vOut, uint triangleIndex : SV_PrimitiveID)
 
     adjustShadingNormal(sd, v);
 
+    float3 B = cross(sd.N, sd.T);
+    float tangentSign = dot(sd.B, B) >= 0.f ? 1.f : -1.f;
+    uint packedT = encodeNormal2x8(sd.T);
+
     float packedSpecular = asfloat(Pack_R8G8B8A8_Gamma_UFLOAT(float4(sd.specular, sd.linearRoughness)));
 
     GBuffer gBufOut;
 	gBufOut.albedo     = float4(sd.diffuse, sd.opacity);
     gBufOut.metallic = sd.metallic;
     gBufOut.positon    = float4(sd.posW, packedSpecular);
-    gBufOut.normal     = float4(sd.N, length(sd.posW - cameraPos));
-    gBufOut.emissive   = float4(sd.emissive, 1.0);
+    gBufOut.normal     = float4(sd.N, asfloat(packedT));
+    gBufOut.emissive   = float4(sd.emissive, tangentSign);
     gBufOut.faceN      = float4(sd.faceN, sd.frontFacing? 1.0f: 0.0f);                  
     
     // Motion Vectors

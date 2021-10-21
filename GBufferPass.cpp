@@ -58,7 +58,7 @@ void GBufferPass::Execute(RenderContext* renderContext)
 
     const float4 clearColor(0.0f, 0.0f, 0.0f, 0.0f);
     renderContext->clearFbo(m_Fbo.get(), clearColor, 1.0f, 0, FboAttachmentType::Color);
-    //renderContext->clearUAV(m_MotionTexture->getUAV().get(), float4(0.f));
+    renderContext->clearUAV(m_MotionTexture->getUAV().get(), float4(0.f));
 
     m_DepthPass->Execute(renderContext);
     m_Fbo->attachDepthStencilTarget(m_DepthPass->GetDepthTexture());

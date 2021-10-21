@@ -4,6 +4,7 @@ import Utils.Math.MathHelpers;
 import Utils.Sampling.SampleGenerator;
 import Utils.Color.ColorHelpers;
 import Utils.Math.PackedFormats;
+import Experimental.Scene.Material.IBxDF;
 
 import Helpers;
 
@@ -92,8 +93,11 @@ bool PrepareRenderingData(GBuffer pGBuffer, uint2 texCoord, float3 cameraPos, ou
 {
     sd.posW = pGBuffer._TexPosition[texCoord].xyz;
     sd.V = normalize(cameraPos - sd.posW);
-    sd.N = pGBuffer.GetNormal(texCoord, temporal);
     
+    sd.N = pGBuffer.GetNormal(texCoord, temporal);
+    float4 tangentW = float4(decodeNormal2x8(asuint(pGBuffer._TexShadingNormal[texCoord].w)), pGBuffer._TexEmissive[texCoord].w);
+    computeTangentSpace(sd, tangentW);
+
     sd.faceN = pGBuffer._TexFaceNormal[texCoord].xyz;
     sd.frontFacing = pGBuffer._TexFaceNormal[texCoord].w > 0.5;
     
@@ -110,7 +114,14 @@ bool PrepareRenderingData(GBuffer pGBuffer, uint2 texCoord, float3 cameraPos, ou
 
     sd.ggxAlpha = max(0.0064, sd.linearRoughness * sd.linearRoughness);
 
-    return pGBuffer._TexEmissive[texCoord].a > 0.5;
+    sd.transmission = 1.0f;
+    sd.IoR = 1.5f;
+    sd.eta = sd.frontFacing ? (1 / sd.IoR) : sd.IoR;
+    sd.diffuseTransmission = 0.0f;
+    sd.specularTransmission = 0.0f;
+    sd.setActiveLobes((uint)LobeType::All);
+
+    return sd.opacity > 0.0f;
 }
 
 bool AreMaterialsSimilar(ShadingData a, ShadingData b)

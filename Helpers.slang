@@ -1,3 +1,5 @@
+#include "Utils/Math/MathConstants.slangh"
+
 // Pack [0.0, 1.0] float to a uint of a given bit depth
 #define PACK_UFLOAT_TEMPLATE(size)                      \
 uint Pack_R ## size ## _UFLOAT(float r, float d = 0.5f) \
@@ -141,4 +143,27 @@ float3 sphericalToCartesian(float r, float azimuth, float elevation)
     float z = r * sinAz * cosEl;
 
     return float3(x, y, z);
+}
+
+float3 cosineWeightedSampling(float2 XY, float3 N, out float pdf)
+{
+    float3 w = N;
+    float3 u = 0.0;
+    if (abs(w.x) > 0.1)
+    {
+        u = normalize(cross(float3(0.0, 1.0, 0.0), w));
+    }
+    else
+    {
+        u = normalize(cross(float3(1.0, 0.0, 0.0), w));
+    }
+    float3 v = cross(w, u);
+    float r1 = 2.0 * M_PI * XY.x;
+    float r2 = XY.y;
+    float r2s = sqrt(r2);
+    float3 dir = normalize((u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1.0 - r2)));
+
+    pdf = dot(N, dir) / M_PI;
+
+    return dir;
 }

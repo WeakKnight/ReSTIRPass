@@ -90,7 +90,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         /*cb["gInputBufferIndex"] = shadeInputBufferIndex;*/
         mpGBufferPass->SetShaderData(cb["gGBuffer"]);
         mpShadingPass["gShadingOutput"] = shadingOutput;
-
+        mpScene->setRaytracingShaderData(pRenderContext, mpShadingPass->getRootVar());
         mpShadingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
 }
