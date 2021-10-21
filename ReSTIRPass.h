@@ -28,8 +28,10 @@
 #pragma once
 #include "Falcor.h"
 #include "FalcorExperimental.h"
+#include "Utils/Sampling/SampleGenerator.h"
+#include "GBufferPass.h"
 
-using namespace Falcor;
+using namespace Falcor; 
 
 class ReSTIRPass : public RenderPass
 {
@@ -49,10 +51,26 @@ public:
     virtual void compile(RenderContext* pContext, const CompileData& compileData) override {}
     virtual void execute(RenderContext* pRenderContext, const RenderData& renderData) override;
     virtual void renderUI(Gui::Widgets& widget) override;
-    virtual void setScene(RenderContext* pRenderContext, const Scene::SharedPtr& pScene) override {}
+    virtual void setScene(RenderContext* pRenderContext, const Scene::SharedPtr& pScene);
     virtual bool onMouseEvent(const MouseEvent& mouseEvent) override { return false; }
     virtual bool onKeyEvent(const KeyboardEvent& keyEvent) override { return false; }
 
 private:
     ReSTIRPass() = default;
+
+    Scene::SharedPtr                    mpScene;
+    SampleGenerator::SharedPtr          mpSampleGenerator;
+
+    GBufferPass::SharedPtr              mpGBufferPass;
+    ComputePass::SharedPtr              mpShadingPass;
+
+    Buffer::SharedPtr                   mpReservoirBuffer;
+    Buffer::SharedPtr                   mpRISBuffer;
+    Buffer::SharedPtr                   mpNeighborOffsetBuffer;
+
+    uint                                mLastFrameOutputReservoir = 0;
+    uint                                mCurrentFrameOutputReservoir = 0;
+    bool                                mEnableSpatialResampling = false;
+    bool                                mEnableTemporalResampling = false;
+    bool                                mEnablePresampling = true;
 };

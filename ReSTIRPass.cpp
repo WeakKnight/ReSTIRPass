@@ -26,11 +26,12 @@
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **************************************************************************/
 #include "ReSTIRPass.h"
-
+#include "Helpers.h"
 
 namespace
 {
-    const char kDesc[] = "Insert pass description here";    
+    const char kDesc[] = "ReSTIR Pass";
+    const char kOutput[] = "output";
 }
 
 // Don't remove this. it's required for hot-reload to function properly
@@ -61,17 +62,63 @@ RenderPassReflection ReSTIRPass::reflect(const CompileData& compileData)
 {
     // Define the required resources here
     RenderPassReflection reflector;
-    //reflector.addOutput("dst");
-    //reflector.addInput("src");
+    reflector.addOutput(kOutput, "Output").bindFlags(ResourceBindFlags::RenderTarget | ResourceBindFlags::UnorderedAccess | ResourceBindFlags::ShaderResource).format(ResourceFormat::RGBA32Float);
     return reflector;
 }
 
 void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& renderData)
 {
-    // renderData holds the requested resources
-    // auto& pTexture = renderData["src"]->asTexture();
+    if (mpScene == nullptr)
+    {
+        return;
+    }
+
+    mpGBufferPass->Execute(pRenderContext);
+
+    Texture::SharedPtr shadingOutput = renderData[kOutput]->asTexture();
+
+    {
+        PROFILE("Shading");
+
+        auto cb = mpShadingPass["CB"];
+        cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
+        cb["gFrameIndex"] = (uint)gpFramework->getGlobalClock().getFrame();
+        //cb["gParams"]["tileSize"] = 512u;
+        //cb["gParams"]["tileCount"] = 128u;
+        //cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
+        //cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
+        /*cb["gInputBufferIndex"] = shadeInputBufferIndex;*/
+        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        mpShadingPass["gShadingOutput"] = shadingOutput;
+
+        mpShadingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
+    }
 }
 
 void ReSTIRPass::renderUI(Gui::Widgets& widget)
 {
+}
+
+void ReSTIRPass::setScene(RenderContext* pRenderContext, const Scene::SharedPtr& pScene)
+{
+    mpScene = pScene;
+
+    mpGBufferPass = GBufferPass::Create(mpScene);
+
+    mpSampleGenerator = SampleGenerator::create(SAMPLE_GENERATOR_UNIFORM);
+
+    Shader::DefineList defines = mpScene->getSceneDefines();
+    defines.add(mpSampleGenerator->getDefines());
+    defines.add("_MS_DISABLE_ALPHA_TEST");
+    defines.add("_DEFAULT_ALPHA_TEST");
+    if (mEnablePresampling)
+    {
+        defines.add("_PRE_SAMPLING");
+    }
+
+    {
+        Program::Desc desc;
+        desc.addShaderLibrary("RenderPasses/ReSTIRPass/Shading.cs.slang").csEntry("main").setShaderModel("6_5");
+        mpShadingPass = ComputePass::create(desc, defines);
+    }
 }
