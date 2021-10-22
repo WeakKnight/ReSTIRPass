@@ -46,19 +46,37 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
     bool valid = PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd);
     if (valid)
     {
-        float bsdfPdf;
-        float3 sampledDir = cosineWeightedSampling(sampleNext2D(sg), sd.N, bsdfPdf);
-
-        RayDesc ray;
-        ray.Origin = sd.computeNewRayOrigin();
-        ray.Direction = sampledDir;
-        ray.TMin = 0.0f;
-	    ray.TMax = 1.0e38f;
-        if (traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
+        float3 posWOrigin = sd.computeNewRayOrigin();
+        EnvMapSample envMapSample;
+        if (gEnvMapSampler.sample(sampleNext2D(sg), envMapSample))
         {
-            float3 Le = gScene.envMap.eval(sampledDir);
-            res += Le * gData.standardMaterial.eval(sd, sampledDir) / bsdfPdf;
+            RayDesc ray;
+            ray.Origin = posWOrigin;
+            ray.Direction = envMapSample.dir;
+            ray.TMin = 0.0f;
+            ray.TMax = 1.0e38f;
+
+            if (traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
+            {
+                res += envMapSample.Le * gData.standardMaterial.eval(sd, envMapSample.dir) / envMapSample.pdf;
+            }
         }
+
+        TriangleLightSample lightSample;
+        if (gEmissiveLightSampler.sampleLight(posWOrigin, sd.N, true, sg, lightSample) && dot(sd.N, lightSample.dir) >= kMinCosTheta)
+        {
+            RayDesc ray;
+            ray.Origin = posWOrigin;
+            ray.Direction = lightSample.dir;
+            ray.TMin = 0.0f;
+            ray.TMax = lightSample.distance;
+            if (traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
+            {
+                res += lightSample.Le * gData.standardMaterial.eval(sd, lightSample.dir) / lightSample.pdf;
+            }
+        }
+
+        res += sd.emissive;
     }
     else
     {
