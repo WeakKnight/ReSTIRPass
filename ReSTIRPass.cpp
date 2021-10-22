@@ -32,6 +32,7 @@ namespace
 {
     const char kDesc[] = "ReSTIR Pass";
     const char kOutput[] = "output";
+    const char kMotionVector[] = "motion";
 }
 
 // Don't remove this. it's required for hot-reload to function properly
@@ -63,6 +64,7 @@ RenderPassReflection ReSTIRPass::reflect(const CompileData& compileData)
     // Define the required resources here
     RenderPassReflection reflector;
     reflector.addOutput(kOutput, "Output").bindFlags(ResourceBindFlags::RenderTarget | ResourceBindFlags::UnorderedAccess | ResourceBindFlags::ShaderResource).format(ResourceFormat::RGBA32Float);
+    reflector.addOutput(kMotionVector, "Motion Vectors").bindFlags(ResourceBindFlags::UnorderedAccess | ResourceBindFlags::ShaderResource).format(ResourceFormat::RG32Float);
     return reflector;
 }
 
@@ -73,12 +75,37 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         return;
     }
 
-    mpGBufferPass->Execute(pRenderContext);
+    {
+        PROFILE("Update Lights");
+        if (is_set(mpScene->getUpdates(), Scene::UpdateFlags::EnvMapChanged))
+        {
+            mpEnvMapSampler = nullptr;
+        }
+        if (mpScene->useEnvLight())
+        {
+            if (!mpEnvMapSampler)
+            {
+                mpEnvMapSampler = EnvMapSampler::create(pRenderContext, mpScene->getEnvMap());
+            }
+        }
+        if (!mpEmissiveSampler)
+        {
+            mpEmissiveSampler = EmissivePowerSampler::create(pRenderContext, mpScene);
+            UpdatePrograms();
+        }
+        mpEmissiveSampler->update(pRenderContext);
+    }
 
-    Texture::SharedPtr shadingOutput = renderData[kOutput]->asTexture();
+    {
+        PROFILE("GBuffer");
+        Texture::SharedPtr motionTexture = renderData[kMotionVector]->asTexture();
+        mpGBufferPass->Execute(pRenderContext, motionTexture);
+    }
 
     {
         PROFILE("Shading");
+
+        Texture::SharedPtr shadingOutput = renderData[kOutput]->asTexture();
 
         auto cb = mpShadingPass["CB"];
         cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
@@ -89,6 +116,8 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         //cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
         /*cb["gInputBufferIndex"] = shadeInputBufferIndex;*/
         mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
+        mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
         mpShadingPass["gShadingOutput"] = shadingOutput;
         mpScene->setRaytracingShaderData(pRenderContext, mpShadingPass->getRootVar());
         mpShadingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
@@ -102,11 +131,13 @@ void ReSTIRPass::renderUI(Gui::Widgets& widget)
 void ReSTIRPass::setScene(RenderContext* pRenderContext, const Scene::SharedPtr& pScene)
 {
     mpScene = pScene;
-
     mpGBufferPass = GBufferPass::Create(mpScene);
-
     mpSampleGenerator = SampleGenerator::create(SAMPLE_GENERATOR_UNIFORM);
+    UpdatePrograms();
+}
 
+void ReSTIRPass::UpdatePrograms()
+{
     Shader::DefineList defines = mpScene->getSceneDefines();
     defines.add(mpSampleGenerator->getDefines());
     defines.add("_MS_DISABLE_ALPHA_TEST");
@@ -115,10 +146,21 @@ void ReSTIRPass::setScene(RenderContext* pRenderContext, const Scene::SharedPtr&
     {
         defines.add("_PRE_SAMPLING");
     }
-
+    if (mpEmissiveSampler)
+    {
+        defines.add(mpEmissiveSampler->getDefines());
+    }
     {
         Program::Desc desc;
         desc.addShaderLibrary("RenderPasses/ReSTIRPass/Shading.cs.slang").csEntry("main").setShaderModel("6_5");
-        mpShadingPass = ComputePass::create(desc, defines);
+        if (mpShadingPass == nullptr)
+        {
+            mpShadingPass = ComputePass::create(desc, defines);
+        }
+        else
+        {
+            mpShadingPass->getProgram()->addDefines(defines);
+            mpShadingPass->setVars(nullptr);
+        }
     }
 }

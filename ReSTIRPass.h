@@ -28,6 +28,8 @@
 #pragma once
 #include "Falcor.h"
 #include "FalcorExperimental.h"
+#include "Experimental/Scene/Lights/EmissivePowerSampler.h"
+#include "Experimental/Scene/Lights/EmissiveLightSamplerType.slangh"
 #include "Utils/Sampling/SampleGenerator.h"
 #include "GBufferPass.h"
 
@@ -58,8 +60,13 @@ public:
 private:
     ReSTIRPass() = default;
 
+    void UpdatePrograms();
+
     Scene::SharedPtr                    mpScene;
     SampleGenerator::SharedPtr          mpSampleGenerator;
+    EnvMapSampler::SharedPtr            mpEnvMapSampler;
+    EmissiveLightSampler::SharedPtr     mpEmissiveSampler;
+    EmissiveLightSamplerType            mSelectedEmissiveSampler = EmissiveLightSamplerType::Power;
 
     GBufferPass::SharedPtr              mpGBufferPass;
     ComputePass::SharedPtr              mpShadingPass;

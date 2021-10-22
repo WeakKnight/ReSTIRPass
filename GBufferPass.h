@@ -9,7 +9,7 @@ public:
 
     void Resize(uint32_t width, uint32_t height);
 
-    void Execute(RenderContext* renderContext);
+    void Execute(RenderContext* renderContext, Texture::SharedPtr motionTexture);
 
     void SetShaderData(const ShaderVar& var) const;
 

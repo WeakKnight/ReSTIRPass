@@ -43,8 +43,10 @@ void GBufferPass::Resize(uint32_t width, uint32_t height)
     m_InternalPreviousLinearZAndNormalRT = Texture::create2D(width, height, ResourceFormat::RGBA32Float, 1, 1, nullptr, Resource::BindFlags::RenderTarget | Resource::BindFlags::ShaderResource);
 }
 
-void GBufferPass::Execute(RenderContext* renderContext)
+void GBufferPass::Execute(RenderContext* renderContext, Texture::SharedPtr motionTexture)
 {
+    m_MotionTexture = motionTexture;
+
     Camera::SharedPtr camera = mpScene->getCamera();
 
     renderContext->blit(m_Fbo->getColorTexture(6)->getSRV(),

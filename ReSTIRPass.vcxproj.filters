@@ -38,4 +38,7 @@
       <UniqueIdentifier>{dc26d98f-ecf5-4c1a-a5cf-760a6c68fbdf}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="InitialSampling.cs.slang" />
+  </ItemGroup>
 </Project>

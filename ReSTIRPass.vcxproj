@@ -48,6 +48,9 @@
     <ShaderSource Include="ReSTIR.slang" />
     <ShaderSource Include="Shading.cs.slang" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="InitialSampling.cs.slang" />
+  </ItemGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
