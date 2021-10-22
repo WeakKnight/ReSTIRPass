@@ -77,6 +77,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
 
     {
         PROFILE("Update Lights");
+        
         if (is_set(mpScene->getUpdates(), Scene::UpdateFlags::EnvMapChanged))
         {
             mpEnvMapSampler = nullptr;
@@ -90,8 +91,9 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         }
         if (!mpEmissiveSampler)
         {
+            mpScene->getLightCollection(pRenderContext)->prepareSyncCPUData(pRenderContext);
             mpEmissiveSampler = EmissivePowerSampler::create(pRenderContext, mpScene);
-            UpdatePrograms();
+            CreatePasses();
         }
         mpEmissiveSampler->update(pRenderContext);
     }
@@ -102,6 +104,60 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         mpGBufferPass->Execute(pRenderContext, motionTexture);
     }
 
+    uint32_t renderWidth = gpFramework->getTargetFbo()->getWidth();
+    uint32_t renderHeight = gpFramework->getTargetFbo()->getHeight();
+    uint32_t renderWidthBlocks = (renderWidth + 16 - 1) / 16;
+    uint32_t renderHeightBlocks = (renderHeight + 16 - 1) / 16;
+    uint reservoirBlockRowPitch = renderWidthBlocks * (16 * 16);
+    uint reservoirArrayPitch = reservoirBlockRowPitch * renderHeightBlocks;
+
+    if (mpReservoirBuffer == nullptr)
+    {
+        const uint32_t reservoirLayers = 2;
+        mpReservoirBuffer = Buffer::createStructured(mpShadingPass["gReservoirs"], reservoirArrayPitch * reservoirLayers);
+        mpReservoirBuffer->setName("ReSTIR: Reservoir Buffer");
+    }
+
+    if (mNeedUpdateDefines)
+    {
+        UpdateDefines();
+    }
+
+    mLastFrameOutputReservoir = mCurrentFrameOutputReservoir;
+
+    uint32_t initialOutputBufferIndex = !mLastFrameOutputReservoir;
+    uint32_t temporalInputBufferIndex = mLastFrameOutputReservoir;
+    uint32_t temporalOutputBufferIndex = initialOutputBufferIndex;
+    uint32_t spatialInputBufferIndex = temporalOutputBufferIndex;
+    uint32_t spatialOutputBufferIndex = !spatialInputBufferIndex;
+    uint32_t shadeInputBufferIndex = mEnableSpatialResampling ? spatialOutputBufferIndex : temporalOutputBufferIndex;
+
+    mCurrentFrameOutputReservoir = shadeInputBufferIndex;
+
+    {
+        PROFILE("Initial Sampling");
+        auto cb = mpInitialSamplingPass["CB"];
+        cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
+        cb["gFrameIndex"] = (uint)gpFramework->getGlobalClock().getFrame();
+        cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
+        cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
+        cb["gOutputBufferIndex"] = initialOutputBufferIndex;
+        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
+        mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
+        mpScene->setRaytracingShaderData(pRenderContext, mpInitialSamplingPass->getRootVar());
+        mpInitialSamplingPass["gReservoirs"] = mpReservoirBuffer;
+        mpInitialSamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
+    }
+
+    {
+        PROFILE("Temporal Resampling");
+    }
+
+    {
+        PROFILE("Spatial Resampling");
+    }
+
     {
         PROFILE("Shading");
 
@@ -110,14 +166,13 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         auto cb = mpShadingPass["CB"];
         cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
         cb["gFrameIndex"] = (uint)gpFramework->getGlobalClock().getFrame();
-        //cb["gParams"]["tileSize"] = 512u;
-        //cb["gParams"]["tileCount"] = 128u;
-        //cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
-        //cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
-        /*cb["gInputBufferIndex"] = shadeInputBufferIndex;*/
+        cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
+        cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
+        cb["gInputBufferIndex"] = shadeInputBufferIndex;
         mpGBufferPass->SetShaderData(cb["gGBuffer"]);
         mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
         mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
+        mpShadingPass["gReservoirs"] = mpReservoirBuffer;
         mpShadingPass["gShadingOutput"] = shadingOutput;
         mpScene->setRaytracingShaderData(pRenderContext, mpShadingPass->getRootVar());
         mpShadingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
@@ -126,6 +181,21 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
 
 void ReSTIRPass::renderUI(Gui::Widgets& widget)
 {
+    bool dirty = false;
+
+    if (auto group = widget.group("Initial Sampling"))
+    {
+        dirty |= group.var("Initial Emissive Triangle Samples", mInitialEmissiveTriangleSamples, 1u, 32u);
+        dirty |= group.var("Initial EnvMap Samples", mInitialEnvMapSamples, 1u, 32u);
+        
+    }
+
+    if (auto group = widget.group("Shading"))
+    {
+        dirty |= group.checkbox("Store Final Visibility", mStoreFinalVisibility);
+    }
+
+    mNeedUpdateDefines = dirty;
 }
 
 void ReSTIRPass::setScene(RenderContext* pRenderContext, const Scene::SharedPtr& pScene)
@@ -133,10 +203,36 @@ void ReSTIRPass::setScene(RenderContext* pRenderContext, const Scene::SharedPtr&
     mpScene = pScene;
     mpGBufferPass = GBufferPass::Create(mpScene);
     mpSampleGenerator = SampleGenerator::create(SAMPLE_GENERATOR_UNIFORM);
-    UpdatePrograms();
+
+    std::vector<uint8_t> offsets;
+    offsets.resize(8192 * 2);
+    FillNeighborOffsetBuffer(offsets.data());
+    mpNeighborOffsetBuffer = Buffer::createTyped(ResourceFormat::RG8Snorm, 8192, ResourceBindFlags::ShaderResource | ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::None, offsets.data());
+    mpNeighborOffsetBuffer->setName("ReSTIR: Neighbor Offset Buffer");
+    
+    CreatePasses();
 }
 
-void ReSTIRPass::UpdatePrograms()
+void ReSTIRPass::AddDefines(ComputePass::SharedPtr pass, Shader::DefineList& defines)
+{
+    pass->getProgram()->addDefines(defines);
+    pass->setVars(nullptr);
+}
+
+void ReSTIRPass::RemoveDefines(ComputePass::SharedPtr pass, Shader::DefineList& defines)
+{
+    pass->getProgram()->removeDefines(defines);
+    pass->setVars(nullptr);
+}
+
+void ReSTIRPass::CreatePass(ComputePass::SharedPtr& pass, const char* path, Shader::DefineList& defines)
+{
+    Program::Desc desc;
+    desc.addShaderLibrary(path).csEntry("main").setShaderModel("6_5");
+    pass = ComputePass::create(desc, defines, false);
+}
+
+void ReSTIRPass::CreatePasses()
 {
     Shader::DefineList defines = mpScene->getSceneDefines();
     defines.add(mpSampleGenerator->getDefines());
@@ -150,17 +246,30 @@ void ReSTIRPass::UpdatePrograms()
     {
         defines.add(mpEmissiveSampler->getDefines());
     }
+
+    CreatePass(mpInitialSamplingPass, "RenderPasses/ReSTIRPass/InitialSampling.cs.slang", defines);
+    CreatePass(mpShadingPass, "RenderPasses/ReSTIRPass/Shading.cs.slang", defines);
+
+    UpdateDefines();
+}
+
+void ReSTIRPass::UpdateDefines()
+{
     {
-        Program::Desc desc;
-        desc.addShaderLibrary("RenderPasses/ReSTIRPass/Shading.cs.slang").csEntry("main").setShaderModel("6_5");
-        if (mpShadingPass == nullptr)
-        {
-            mpShadingPass = ComputePass::create(desc, defines);
-        }
-        else
-        {
-            mpShadingPass->getProgram()->addDefines(defines);
-            mpShadingPass->setVars(nullptr);
-        }
+        const char* kInitialEmissiveTriangleSamples = "_INITIAL_EMISSIVE_TRIANGLE_SAMPLES";
+        const char* kInitialEnvMapSamples = "_INITIAL_ENVMAP_SAMPLES";
+        Shader::DefineList defines;
+        defines.add(kInitialEmissiveTriangleSamples, std::to_string(mInitialEmissiveTriangleSamples));
+        defines.add(kInitialEnvMapSamples, std::to_string(mInitialEnvMapSamples));        
+        AddDefines(mpInitialSamplingPass, defines);
     }
+
+    {
+        const char* kStoreFinalVisibility = "_STORE_FINAL_VISIBILITY";
+        Shader::DefineList defines;
+        defines.add(kStoreFinalVisibility, mStoreFinalVisibility ? "1" : "0");
+        AddDefines(mpShadingPass, defines);
+    }
+
+    mNeedUpdateDefines = false;
 }

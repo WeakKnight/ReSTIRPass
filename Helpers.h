@@ -1,19 +1,5 @@
 #pragma once
 
-void computePdfTextureSize(uint32_t maxItems, uint32_t& outWidth, uint32_t& outHeight, uint32_t& outMipLevels)
-{
-    // Compute the size of a power-of-2 rectangle that fits all items, 1 item per pixel
-    double textureWidth = std::max(1.0, ceil(sqrt(double(maxItems))));
-    textureWidth = exp2(ceil(log2(textureWidth)));
-    double textureHeight = std::max(1.0, ceil(maxItems / textureWidth));
-    textureHeight = exp2(ceil(log2(textureHeight)));
-    double textureMips = std::max(1.0, log2(std::max(textureWidth, textureHeight)));
-
-    outWidth = uint32_t(textureWidth);
-    outHeight = uint32_t(textureHeight);
-    outMipLevels = uint32_t(textureMips);
-}
-
 void FillNeighborOffsetBuffer(uint8_t* buffer)
 {
     int R = 250;

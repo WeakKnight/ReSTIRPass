@@ -5,6 +5,10 @@ import Utils.Color.ColorHelpers;
 import Scene.RaytracingInline;
 import Scene.Scene;
 import Scene.Shading;
+import Experimental.Scene.Material.StandardMaterial;
+import Experimental.Scene.Material.MaterialHelpers;
+import Experimental.Scene.Lights.EnvMapSampler;
+import Experimental.Scene.Lights.EmissiveLightSampler;
 
 import ReSTIR;
 import GBufferUtils;
@@ -14,9 +18,11 @@ cbuffer CB
 {
     uint2 gViewportDims;
     uint gFrameIndex;
+    uint gOutputBufferIndex;
     ResamplingRuntimeParameters gParams;
     GBuffer gGBuffer;
-    uint gOutputBufferIndex;
+    EnvMapSampler gEnvMapSampler;
+    EmissiveLightSampler gEmissiveLightSampler;
 }
 
 RWStructuredBuffer<Reservoir> gReservoirs;
@@ -29,7 +35,7 @@ static struct Data
 [numthreads(16, 16, 1)]
 void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
 {
-    if (any(threadIndex.xy >= gViewportDims)) 
+    if (any(threadIndex >= gViewportDims)) 
     {
         return;
     }
@@ -38,43 +44,87 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
     Reservoir r = emptyReservoir();
 
     ShadingData sd;
-    bool valid = PrepareRenderingData(gGBuffer, threadIndex.xy, gScene.camera.getPosition(), sd);
+    bool valid = PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd);
     if (valid)
     {
-        for(uint i = 0; i < 8; i++)
-        {
-            uint lightIndex = gFluxTable.sample(sampleNext2D(sg));
-            float lightInvPdf = gFluxTable.weightSum / gFluxTable.getWeight(lightIndex);
+        float3 posWOrigin = sd.computeNewRayOrigin();
 
-            float2 VSLrand = sampleNext2D(sg);
-            float ConePdf = 1.f;
-            float3 ConeDir = 0.f;
-            float targetPdf = luminance(gVirtualLights.coneComputeShadingPointRadianceForVPL(sd, sg, lightIndex));
-            float MISTotalProb = numInitialSamples * ConePdf;
-            if (streamSample(r, lightIndex, VSLrand, sampleNext1D(sg), targetPdf, lightInvPdf / MISTotalProb))
+        Reservoir triangleLightReservoir = emptyReservoir();
+        for (uint i = 0; i < _INITIAL_EMISSIVE_TRIANGLE_SAMPLES; i++);
+        {
+            TriangleLightSample lightSample;
+            if (gEmissiveLightSampler.sampleLight(posWOrigin, sd.N, true, sg, lightSample) && dot(sd.N, lightSample.dir) >= kMinCosTheta)
             {
-                selectedLPdf = ConePdf;
+                float invPdf = 1.0f / lightSample.pdf;
+                float targetPdf = luminance(lightSample.Le * gData.standardMaterial.eval(sd, lightSample.dir) * invPdf);
+                streamSample(triangleLightReservoir, lightSample.triangleIndex, lightSample.uv, sampleNext1D(sg), targetPdf, invPdf);
+            }
+            else
+            {
+                triangleLightReservoir.M += 1;
             }
         }
+        finalizeResampling(triangleLightReservoir, 1.0, triangleLightReservoir.M);
+        triangleLightReservoir.M = 1;
+
+        Reservoir envMapReservoir = emptyReservoir();
+        for(uint i = 0; i < _INITIAL_ENVMAP_SAMPLES; i++)
+        {
+            EnvMapSample envMapSample;
+            if (gEnvMapSampler.sample(sampleNext2D(sg), envMapSample))
+            {
+                float invPdf = 1.0f / envMapSample.pdf;
+                float targetPdf = luminance(envMapSample.Le * gData.standardMaterial.eval(sd, envMapSample.dir) * invPdf);
+                float2 uv = world_to_latlong_map(gScene.envMap.toLocal(envMapSample.dir));
+                streamSample(envMapReservoir, EnvMapIndex, uv, sampleNext1D(sg), targetPdf, invPdf);
+            }
+            else
+            {
+                envMapReservoir.M += 1;
+            }
+        }
+        finalizeResampling(envMapReservoir, 1.0, envMapReservoir.M);
+        envMapReservoir.M = 1;
+
+        combineReservoirs(r, triangleLightReservoir, sampleNext1D(sg), triangleLightReservoir.targetPdf);
+        combineReservoirs(r, envMapReservoir, sampleNext1D(sg), envMapReservoir.targetPdf);
+        finalizeResampling(r, 1.0, 1.0);
+        r.M = 1;        
 
         if (isValidReservoir(r))
         {
-            float3 rayOrigin = computeRayOrigin(sd.posW, sd.frontFacing ? sd.faceN : -sd.faceN);
             uint lightIndex = getReservoirLightIndex(r);
-            float3 lightPos = gVirtualLights.getPosition(lightIndex);
+            float2 lightUV = getReservoirSampleUV(r);
 
-            if (isOccluded(rayOrigin, lightPos))
+            RayDesc ray;
+            ray.Origin = posWOrigin;
+            ray.TMin = 0.0f;
+            if (lightIndex == EnvMapIndex)
+            {
+                ray.Direction = gScene.envMap.toWorld(latlong_map_to_world(lightUV));
+                ray.TMax = 1.0e38f;
+            }
+            else
+            {
+                EmissiveTriangle tri = gScene.lightCollection.getTriangle(lightIndex);
+                float3 lightPos = tri.getPosition(sample_triangle(lightUV));
+                float3 toLight = lightPos - posWOrigin; // Unnormalized light vector
+                const float distSqr = max(FLT_MIN, dot(toLight, toLight)); // Clamp to avoid NaNs below
+                float distance = sqrt(distSqr);
+                ray.Direction = toLight / distance;
+                ray.TMax = distance;
+            }
+
+            if (!traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
             {
                 r.lightData = 0;
                 r.weightSum = 0;
             }
         }
 
-        r.targetPdf /= selectedLPdf; // convert to primary sample space (assuming cone sampling technique) for reusing random numbers
-
-        r.M = 1;
-        finalizeResampling(r, 1.0, r.M);
+        // r.M = 1;
+        // finalizeResampling(r, 1.0, r.M);
     }
 
-    storeReservoir(gParams, r, gReservoirs, threadIndex.xy, gOutputBufferIndex);
+    storeReservoir(gParams, r, gReservoirs, threadIndex, gOutputBufferIndex);
 }

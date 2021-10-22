@@ -1,10 +1,10 @@
 #include "Utils/Math/MathConstants.slangh"
 import Utils.Sampling.SampleGenerator;
 
+static const uint EnvMapIndex = 0x7FFFFFFF; 
+
 struct ResamplingRuntimeParameters
 {
-    uint tileCount;
-    uint tileSize;
     uint reservoirBlockRowPitch;
     uint reservoirArrayPitch;
 };

@@ -60,7 +60,11 @@ public:
 private:
     ReSTIRPass() = default;
 
-    void UpdatePrograms();
+    void AddDefines(ComputePass::SharedPtr pass, Shader::DefineList& defines);
+    void RemoveDefines(ComputePass::SharedPtr pass, Shader::DefineList& defines);
+    void CreatePass(ComputePass::SharedPtr& pass, const char* path, Shader::DefineList& defines);
+    void CreatePasses();
+    void UpdateDefines();
 
     Scene::SharedPtr                    mpScene;
     SampleGenerator::SharedPtr          mpSampleGenerator;
@@ -69,15 +73,23 @@ private:
     EmissiveLightSamplerType            mSelectedEmissiveSampler = EmissiveLightSamplerType::Power;
 
     GBufferPass::SharedPtr              mpGBufferPass;
+
+    ComputePass::SharedPtr              mpInitialSamplingPass;
     ComputePass::SharedPtr              mpShadingPass;
 
     Buffer::SharedPtr                   mpReservoirBuffer;
-    Buffer::SharedPtr                   mpRISBuffer;
     Buffer::SharedPtr                   mpNeighborOffsetBuffer;
 
     uint                                mLastFrameOutputReservoir = 0;
     uint                                mCurrentFrameOutputReservoir = 0;
+
     bool                                mEnableSpatialResampling = false;
     bool                                mEnableTemporalResampling = false;
     bool                                mEnablePresampling = true;
+
+    uint                                mInitialEmissiveTriangleSamples = 4u;
+    uint                                mInitialEnvMapSamples = 4u;
+    bool                                mStoreFinalVisibility = true;
+
+    bool                                mNeedUpdateDefines = false;
 };
