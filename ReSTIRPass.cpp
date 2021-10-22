@@ -150,10 +150,26 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         mpInitialSamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
 
+    if (mEnableTemporalResampling)
     {
         PROFILE("Temporal Resampling");
+        auto cb = mpTemporalResamplingPass["CB"];
+        cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
+        cb["gFrameIndex"] = (uint)gpFramework->getGlobalClock().getFrame();
+        cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
+        cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
+        cb["gInputBufferIndex"] = initialOutputBufferIndex;
+        cb["gHistoryBufferIndex"] = temporalInputBufferIndex;
+        cb["gOutputBufferIndex"] = temporalOutputBufferIndex;
+        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
+        mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
+        mpScene->setRaytracingShaderData(pRenderContext, mpTemporalResamplingPass->getRootVar());
+        mpTemporalResamplingPass["gReservoirs"] = mpReservoirBuffer;
+        mpTemporalResamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
 
+    if (mEnableSpatialResampling)
     {
         PROFILE("Spatial Resampling");
     }
@@ -188,6 +204,16 @@ void ReSTIRPass::renderUI(Gui::Widgets& widget)
         dirty |= group.var("Initial Emissive Triangle Samples", mInitialEmissiveTriangleSamples, 1u, 32u);
         dirty |= group.var("Initial EnvMap Samples", mInitialEnvMapSamples, 1u, 32u);
         
+    }
+
+    if (auto group = widget.group("Temporal Resampling"))
+    {
+        group.checkbox("Enable Temporal Resampling", mEnableTemporalResampling);
+    }
+
+    if (auto group = widget.group("Spatial Resampling"))
+    {
+        group.checkbox("Enable Spatial Resampling", mEnableSpatialResampling);
     }
 
     if (auto group = widget.group("Shading"))
@@ -248,6 +274,7 @@ void ReSTIRPass::CreatePasses()
     }
 
     CreatePass(mpInitialSamplingPass, "RenderPasses/ReSTIRPass/InitialSampling.cs.slang", defines);
+    CreatePass(mpTemporalResamplingPass, "RenderPasses/ReSTIRPass/TemporalResampling.cs.slang", defines);
     CreatePass(mpShadingPass, "RenderPasses/ReSTIRPass/Shading.cs.slang", defines);
 
     UpdateDefines();
@@ -262,6 +289,11 @@ void ReSTIRPass::UpdateDefines()
         defines.add(kInitialEmissiveTriangleSamples, std::to_string(mInitialEmissiveTriangleSamples));
         defines.add(kInitialEnvMapSamples, std::to_string(mInitialEnvMapSamples));        
         AddDefines(mpInitialSamplingPass, defines);
+    }
+
+    {
+        Shader::DefineList defines;
+        AddDefines(mpTemporalResamplingPass, defines);
     }
 
     {

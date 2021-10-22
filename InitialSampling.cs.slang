@@ -56,7 +56,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
             if (gEmissiveLightSampler.sampleLight(posWOrigin, sd.N, true, sg, lightSample) && dot(sd.N, lightSample.dir) >= kMinCosTheta)
             {
                 float invPdf = 1.0f / lightSample.pdf;
-                float targetPdf = luminance(lightSample.Le * gData.standardMaterial.eval(sd, lightSample.dir) * invPdf);
+                float targetPdf = luminance(lightSample.Le * gData.standardMaterial.eval(sd, lightSample.dir));
                 streamSample(triangleLightReservoir, lightSample.triangleIndex, lightSample.uv, sampleNext1D(sg), targetPdf, invPdf);
             }
             else
@@ -74,7 +74,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
             if (gEnvMapSampler.sample(sampleNext2D(sg), envMapSample))
             {
                 float invPdf = 1.0f / envMapSample.pdf;
-                float targetPdf = luminance(envMapSample.Le * gData.standardMaterial.eval(sd, envMapSample.dir) * invPdf);
+                float targetPdf = luminance(envMapSample.Le * gData.standardMaterial.eval(sd, envMapSample.dir));
                 float2 uv = world_to_latlong_map(gScene.envMap.toLocal(envMapSample.dir));
                 streamSample(envMapReservoir, EnvMapIndex, uv, sampleNext1D(sg), targetPdf, invPdf);
             }

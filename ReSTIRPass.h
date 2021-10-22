@@ -75,6 +75,8 @@ private:
     GBufferPass::SharedPtr              mpGBufferPass;
 
     ComputePass::SharedPtr              mpInitialSamplingPass;
+    ComputePass::SharedPtr              mpTemporalResamplingPass;
+    ComputePass::SharedPtr              mpSpatialResamplingPass;
     ComputePass::SharedPtr              mpShadingPass;
 
     Buffer::SharedPtr                   mpReservoirBuffer;

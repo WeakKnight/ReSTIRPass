@@ -50,6 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="InitialSampling.cs.slang" />
+    <None Include="TemporalResampling.cs.slang" />
   </ItemGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
