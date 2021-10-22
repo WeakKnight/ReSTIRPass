@@ -41,5 +41,6 @@
   <ItemGroup>
     <None Include="InitialSampling.cs.slang" />
     <None Include="TemporalResampling.cs.slang" />
+    <None Include="SpatialResampling.cs.slang" />
   </ItemGroup>
 </Project>

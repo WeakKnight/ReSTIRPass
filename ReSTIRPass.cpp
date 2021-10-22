@@ -77,19 +77,18 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
 
     {
         PROFILE("Update Lights");
-        
         if (is_set(mpScene->getUpdates(), Scene::UpdateFlags::EnvMapChanged))
         {
             mpEnvMapSampler = nullptr;
         }
         if (mpScene->useEnvLight())
         {
-            if (!mpEnvMapSampler)
+            if (mpEnvMapSampler == nullptr)
             {
                 mpEnvMapSampler = EnvMapSampler::create(pRenderContext, mpScene->getEnvMap());
             }
         }
-        if (!mpEmissiveSampler)
+        if (mpEmissiveSampler == nullptr)
         {
             mpScene->getLightCollection(pRenderContext)->prepareSyncCPUData(pRenderContext);
             mpEmissiveSampler = EmissivePowerSampler::create(pRenderContext, mpScene);
@@ -121,6 +120,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
     if (mNeedUpdateDefines)
     {
         UpdateDefines();
+        mpScene->getCamera()->setFocalDistance(mpScene->getCamera()->getFocalDistance());
     }
 
     mLastFrameOutputReservoir = mCurrentFrameOutputReservoir;
@@ -172,13 +172,24 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
     if (mEnableSpatialResampling)
     {
         PROFILE("Spatial Resampling");
+        auto cb = mpSpatialResamplingPass["CB"];
+        cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
+        cb["gFrameIndex"] = (uint)gpFramework->getGlobalClock().getFrame();
+        cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
+        cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
+        cb["gInputBufferIndex"] = spatialInputBufferIndex;
+        cb["gOutputBufferIndex"] = spatialOutputBufferIndex;
+        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
+        mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
+        mpScene->setRaytracingShaderData(pRenderContext, mpSpatialResamplingPass->getRootVar());
+        mpSpatialResamplingPass["gReservoirs"] = mpReservoirBuffer;
+        mpSpatialResamplingPass["gNeighborOffsetBuffer"] = mpNeighborOffsetBuffer;
+        mpSpatialResamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
 
     {
         PROFILE("Shading");
-
-        Texture::SharedPtr shadingOutput = renderData[kOutput]->asTexture();
-
         auto cb = mpShadingPass["CB"];
         cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
         cb["gFrameIndex"] = (uint)gpFramework->getGlobalClock().getFrame();
@@ -189,7 +200,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
         mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
         mpShadingPass["gReservoirs"] = mpReservoirBuffer;
-        mpShadingPass["gShadingOutput"] = shadingOutput;
+        mpShadingPass["gShadingOutput"] = renderData[kOutput]->asTexture();
         mpScene->setRaytracingShaderData(pRenderContext, mpShadingPass->getRootVar());
         mpShadingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
@@ -198,6 +209,8 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
 void ReSTIRPass::renderUI(Gui::Widgets& widget)
 {
     bool dirty = false;
+
+    dirty |= widget.checkbox("Brute Force", mBruteForce);
 
     if (auto group = widget.group("Initial Sampling"))
     {
@@ -208,12 +221,12 @@ void ReSTIRPass::renderUI(Gui::Widgets& widget)
 
     if (auto group = widget.group("Temporal Resampling"))
     {
-        group.checkbox("Enable Temporal Resampling", mEnableTemporalResampling);
+        dirty |= group.checkbox("Enable Temporal Resampling", mEnableTemporalResampling);
     }
 
     if (auto group = widget.group("Spatial Resampling"))
     {
-        group.checkbox("Enable Spatial Resampling", mEnableSpatialResampling);
+        dirty |= group.checkbox("Enable Spatial Resampling", mEnableSpatialResampling);
     }
 
     if (auto group = widget.group("Shading"))
@@ -275,6 +288,7 @@ void ReSTIRPass::CreatePasses()
 
     CreatePass(mpInitialSamplingPass, "RenderPasses/ReSTIRPass/InitialSampling.cs.slang", defines);
     CreatePass(mpTemporalResamplingPass, "RenderPasses/ReSTIRPass/TemporalResampling.cs.slang", defines);
+    CreatePass(mpSpatialResamplingPass, "RenderPasses/ReSTIRPass/SpatialResampling.cs.slang", defines);
     CreatePass(mpShadingPass, "RenderPasses/ReSTIRPass/Shading.cs.slang", defines);
 
     UpdateDefines();
@@ -297,9 +311,16 @@ void ReSTIRPass::UpdateDefines()
     }
 
     {
+        Shader::DefineList defines;
+        AddDefines(mpSpatialResamplingPass, defines);
+    }
+
+    {
         const char* kStoreFinalVisibility = "_STORE_FINAL_VISIBILITY";
+        const char* kBruteForce = "_BRUTE_FORCE";
         Shader::DefineList defines;
         defines.add(kStoreFinalVisibility, mStoreFinalVisibility ? "1" : "0");
+        defines.add(kBruteForce, mBruteForce ? "1" : "0");
         AddDefines(mpShadingPass, defines);
     }
 

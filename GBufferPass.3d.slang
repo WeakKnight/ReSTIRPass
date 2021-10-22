@@ -61,7 +61,7 @@ GBuffer psMain(VSOut vOut, uint triangleIndex : SV_PrimitiveID)
     gBufOut.positon    = float4(sd.posW, packedSpecular);
     gBufOut.normal     = float4(sd.N, asfloat(packedT));
     gBufOut.emissive   = float4(sd.emissive, tangentSign);
-    gBufOut.faceN      = float4(sd.faceN, sd.frontFacing? 1.0f: 0.0f);                  
+    gBufOut.faceN      = float4(sd.faceN, sd.frontFacing? 1.0f: 0.3f);                  
     
     // Motion Vectors
     const float2 pixelPos = ipos + float2(0.5, 0.5); // Current sample in pixel coords.

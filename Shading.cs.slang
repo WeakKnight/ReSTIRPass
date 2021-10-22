@@ -46,11 +46,11 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
     SampleGenerator sg = SampleGenerator.create(threadIndex, gFrameIndex);
     ShadingData sd;
     bool valid = PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd);
-    if (valid)
+    if (true)
     {
         float3 posWOrigin = sd.computeNewRayOrigin();
 
-#if 1
+#if !_BRUTE_FORCE
         // Reservoir Shading
         {
             Reservoir r = loadReservoir(gParams, gReservoirs, threadIndex, gInputBufferIndex);
@@ -79,7 +79,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
                     const float distSqr = max(FLT_MIN, dot(toLight, toLight)); // Clamp to avoid NaNs below
                     float distance = sqrt(distSqr);
                     ray.Direction = toLight / distance;
-                    ray.TMax = distance;
+                    ray.TMax = distance - 0.001f;
 
                     float2 uv = tri.getTexCoord(barycentric);
                     Le = gScene.getEmissive(tri.materialID, uv, gScene.materialResources[tri.materialID]);

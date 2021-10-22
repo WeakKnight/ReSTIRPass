@@ -121,7 +121,7 @@ bool PrepareRenderingData(GBuffer pGBuffer, uint2 texCoord, float3 cameraPos, ou
     sd.specularTransmission = 0.0f;
     sd.setActiveLobes((uint)LobeType::All);
 
-    return sd.opacity > 0.0f;
+    return pGBuffer._TexFaceNormal[texCoord].w > 0.0f;
 }
 
 bool AreMaterialsSimilar(ShadingData a, ShadingData b)

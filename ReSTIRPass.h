@@ -85,6 +85,8 @@ private:
     uint                                mLastFrameOutputReservoir = 0;
     uint                                mCurrentFrameOutputReservoir = 0;
 
+    bool                                mBruteForce = false;
+
     bool                                mEnableSpatialResampling = false;
     bool                                mEnableTemporalResampling = false;
     bool                                mEnablePresampling = true;
