@@ -11,7 +11,7 @@ import Experimental.Scene.Lights.EnvMapSampler;
 import Experimental.Scene.Lights.EmissiveLightSampler;
 
 import ReSTIR;
-import GBufferUtils;
+import ShadingDataLoader;
 import Helpers;
 
 cbuffer CB
@@ -22,7 +22,7 @@ cbuffer CB
     uint gHistoryBufferIndex;
     uint gOutputBufferIndex;
     ResamplingRuntimeParameters gParams;
-    GBuffer gGBuffer;
+    ShadingDataLoader gShadingDataLoader;
     EnvMapSampler gEnvMapSampler;
     EmissiveLightSampler gEmissiveLightSampler;
 }
@@ -34,9 +34,9 @@ static struct Data
     StandardMaterial standardMaterial;
 } gData;
 
-static const int maxHistoryLength = 2;
-static const float depthThreshold = 0.01f;
-static const float normalThreshold = 0.8f;
+static const int maxHistoryLength = 20;
+static const float positionThreshold = 0.1f;
+static const float normalThreshold = 0.65f;
 
 [numthreads(16, 16, 1)]
 void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
@@ -49,7 +49,8 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
     SampleGenerator sg = SampleGenerator.create(threadIndex, gFrameIndex + 2 * 13);
     Reservoir temporalResult = emptyReservoir();
     ShadingData sd;
-    if (PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd))
+    bool valid = gShadingDataLoader.loadShadingData(threadIndex, gViewportDims, gScene.camera, sd);
+    if (valid)
     {
         float3 posWOrigin = sd.computeNewRayOrigin();
 
@@ -66,7 +67,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
         Reservoir state = emptyReservoir();
         combineReservoirs(state, curSample, 0.5f, curSample.targetPdf);
 
-        float2 motion = gGBuffer.GetMotionVector(threadIndex);
+        float2 motion = gShadingDataLoader.motionVector[threadIndex];
         motion.xy += (sampleNext2D(sg) - 0.5);
         float2 reprojectedSamplePosition = float2(threadIndex) + motion.xy;
         int2 prevPos = int2(round(reprojectedSamplePosition));
@@ -83,15 +84,24 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
                 offset.x = int((sampleNext1D(sg) - 0.5) * radius);
                 offset.y = int((sampleNext1D(sg) - 0.5) * radius);
             }
-
             int2 idx = prevPos + offset;
 
-            if (!PrepareRenderingData(gGBuffer, idx, gScene.camera.getPosition(), neighborSd))
+            if (!isReprjTextureCoordValid(idx, gViewportDims))
             {
                 continue;
             }
 
-            if (!gGBuffer.IsReprjValid(threadIndex, idx, true, normalThreshold, depthThreshold))
+            if (!gShadingDataLoader.loadShadingDataPrevFrame(idx, gViewportDims, gScene.camera, neighborSd))
+            {
+                continue;
+            }
+
+            if (!isReprjNormalValid(sd.N, neighborSd.N, normalThreshold))
+            {
+                continue;
+            }
+
+            if (!isReprjPositionValid(sd.posW, neighborSd.posW, positionThreshold))
             {
                 continue;
             }
@@ -146,7 +156,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
             }
         }
         
-        // If you want to do Unbias, you need to store previous frame GBuffer
+        // If you want to do debias, you need to store previous frame GBuffer
         {
             finalizeResampling(state, 1.0, state.M);
             temporalResult = state;

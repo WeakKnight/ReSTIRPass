@@ -11,7 +11,7 @@ import Experimental.Scene.Lights.EnvMapSampler;
 import Experimental.Scene.Lights.EmissiveLightSampler;
 
 import ReSTIR;
-import GBufferUtils;
+import ShadingDataLoader;
 import Helpers;
 
 cbuffer CB
@@ -20,7 +20,7 @@ cbuffer CB
     uint gFrameIndex;
     uint gOutputBufferIndex;
     ResamplingRuntimeParameters gParams;
-    GBuffer gGBuffer;
+    ShadingDataLoader gShadingDataLoader;
     EnvMapSampler gEnvMapSampler;
     EmissiveLightSampler gEmissiveLightSampler;
 }
@@ -44,7 +44,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
     Reservoir r = emptyReservoir();
 
     ShadingData sd;
-    bool valid = PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd);
+    bool valid = gShadingDataLoader.loadShadingData(threadIndex, gViewportDims, gScene.camera, sd);
     if (valid)
     {
         float3 posWOrigin = sd.computeNewRayOrigin();
@@ -98,7 +98,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
 
             RayDesc ray;
             ray.Origin = posWOrigin;
-            ray.TMin = 0.0f;
+            ray.TMin = 0.001f;
             if (lightIndex == EnvMapIndex)
             {
                 ray.Direction = gScene.envMap.toWorld(latlong_map_to_world(lightUV));
@@ -112,7 +112,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
                 const float distSqr = max(FLT_MIN, dot(toLight, toLight)); // Clamp to avoid NaNs below
                 float distance = sqrt(distSqr);
                 ray.Direction = toLight / distance;
-                ray.TMax = distance;
+                ray.TMax = distance - 0.001f;
             }
 
             if (!traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
@@ -121,9 +121,6 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
                 r.weightSum = 0;
             }
         }
-
-        // r.M = 1;
-        // finalizeResampling(r, 1.0, r.M);
     }
 
     storeReservoir(gParams, r, gReservoirs, threadIndex, gOutputBufferIndex);

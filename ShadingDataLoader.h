@@ -5,7 +5,7 @@ using namespace Falcor;
 class ShadingDataLoader
 {
 public:
-    static void setShaderData(const RenderData& renderData, const ShaderVar& var);
+    static void setShaderData(const RenderData& renderData, Texture::SharedPtr VBufferPrev, const ShaderVar& var);
 };
 
 

@@ -11,7 +11,7 @@ import Experimental.Scene.Lights.EnvMapSampler;
 import Experimental.Scene.Lights.EmissiveLightSampler;
 
 import ReSTIR;
-import GBufferUtils;
+import ShadingDataLoader;
 import Helpers;
 
 cbuffer CB
@@ -21,7 +21,7 @@ cbuffer CB
     uint gInputBufferIndex;
     uint gOutputBufferIndex;
     ResamplingRuntimeParameters gParams;
-    GBuffer gGBuffer;
+    ShadingDataLoader gShadingDataLoader;
     EnvMapSampler gEnvMapSampler;
     EmissiveLightSampler gEmissiveLightSampler;
 }
@@ -38,7 +38,7 @@ static const uint numSamples = 4;
 static const uint numDisocclusionBoostSamples = 4;
 static const uint targetHistoryLength = 20;
 static const float samplingRadius = 30.0f;
-static const float depthThreshold = 0.1f;
+static const float positionThreshold = 1.0f;
 static const float normalThreshold = 0.5f;
 static const uint neighborOffsetMask = 8191;
 
@@ -53,7 +53,8 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
     SampleGenerator sg = SampleGenerator.create(threadIndex, gFrameIndex + 3 * 13);
     Reservoir spatialResult = emptyReservoir();
     ShadingData sd;
-    if (PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd))
+    bool valid = gShadingDataLoader.loadShadingData(threadIndex, gViewportDims, gScene.camera, sd);
+    if (valid)
     {
         float3 posWOrigin = sd.computeNewRayOrigin();
 
@@ -86,18 +87,28 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
             int2 spatialOffset = int2(float2(gNeighborOffsetBuffer[sampleIdx].xy) * samplingRadius);
             int2 idx = threadIndex + spatialOffset;
 
-            ShadingData neighborSd;
-            if (!PrepareRenderingData(gGBuffer, idx, gScene.camera.getPosition(), neighborSd))
-            {
-                continue;
-            }
-            
-            if (!gGBuffer.IsReprjValid(threadIndex, idx, false, normalThreshold, depthThreshold))
+            if (!isReprjTextureCoordValid(idx, gViewportDims))
             {
                 continue;
             }
 
-            if (!AreMaterialsSimilar(sd, neighborSd))
+            ShadingData neighborSd;
+            if (!gShadingDataLoader.loadShadingData(idx, gViewportDims, gScene.camera, neighborSd))
+            {
+                continue;
+            }
+            
+            if (!isReprjNormalValid(sd.N, neighborSd.N, normalThreshold))
+            {
+                continue;
+            }
+
+            if (!isReprjPositionValid(sd.posW, neighborSd.posW, positionThreshold))
+            {
+                continue;
+            }
+
+            if (!areMaterialsSimilar(sd, neighborSd))
             {
                 continue;
             }
@@ -156,7 +167,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
                 int2 idx = threadIndex + int2(float2(gNeighborOffsetBuffer[sampleIdx].xy) * samplingRadius);
             
                 ShadingData neighborSd;
-                PrepareRenderingData(gGBuffer, idx, gScene.camera.getPosition(), neighborSd);
+                gShadingDataLoader.loadShadingData(idx, gViewportDims, gScene.camera, neighborSd);
 
                 uint lightIndex = selectedLight;
                 float2 lightUV = getReservoirSampleUV(state);

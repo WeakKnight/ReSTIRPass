@@ -36,7 +36,8 @@ namespace
 
     const ChannelList kInputChannels =
     {
-        { "vbuffer",    "",     "Visibility buffer in packed format",  false /* optional */, HitInfo::kDefaultFormat },
+        { "vbuffer",    "",     "Visibility buffer in packed format",   false, HitInfo::kDefaultFormat },
+        { "motionVecs", "",     "Motion vectors in screen-space",       false, ResourceFormat::RG32Float }
     };
 
     const ChannelList kOutputChannels =
@@ -107,6 +108,13 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         mpEmissiveSampler->update(pRenderContext);
     }
 
+    if (mpVBufferPrev == nullptr)
+    {
+        auto VBuffer = renderData["vbuffer"]->asTexture();
+        mpVBufferPrev = Texture::create2D(VBuffer->getWidth(), VBuffer->getHeight(), VBuffer->getFormat(), VBuffer->getArraySize(), VBuffer->getMipCount(), nullptr, Resource::BindFlags::ShaderResource);
+        pRenderContext->copyResource(mpVBufferPrev.get(), VBuffer.get());
+    }
+
     uint32_t renderWidth = gpFramework->getTargetFbo()->getWidth();
     uint32_t renderHeight = gpFramework->getTargetFbo()->getHeight();
     uint32_t renderWidthBlocks = (renderWidth + 16 - 1) / 16;
@@ -124,7 +132,6 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
     if (mNeedUpdateDefines)
     {
         UpdateDefines();
-        mpScene->getCamera()->setFocalDistance(mpScene->getCamera()->getFocalDistance());
     }
 
     mLastFrameOutputReservoir = mCurrentFrameOutputReservoir;
@@ -138,7 +145,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
 
     mCurrentFrameOutputReservoir = shadeInputBufferIndex;
 
-   /* {
+    {
         PROFILE("Initial Sampling");
         auto cb = mpInitialSamplingPass["CB"];
         cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
@@ -146,14 +153,14 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
         cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
         cb["gOutputBufferIndex"] = initialOutputBufferIndex;
-        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        ShadingDataLoader::setShaderData(renderData, mpVBufferPrev, cb["gShadingDataLoader"]);
         mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
         mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
         mpScene->setRaytracingShaderData(pRenderContext, mpInitialSamplingPass->getRootVar());
         mpInitialSamplingPass["gReservoirs"] = mpReservoirBuffer;
         mpInitialSamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
-
+    
     if (mEnableTemporalResampling)
     {
         PROFILE("Temporal Resampling");
@@ -165,7 +172,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         cb["gInputBufferIndex"] = initialOutputBufferIndex;
         cb["gHistoryBufferIndex"] = temporalInputBufferIndex;
         cb["gOutputBufferIndex"] = temporalOutputBufferIndex;
-        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        ShadingDataLoader::setShaderData(renderData, mpVBufferPrev, cb["gShadingDataLoader"]);
         mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
         mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
         mpScene->setRaytracingShaderData(pRenderContext, mpTemporalResamplingPass->getRootVar());
@@ -173,6 +180,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         mpTemporalResamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
 
+    
     if (mEnableSpatialResampling)
     {
         PROFILE("Spatial Resampling");
@@ -183,14 +191,14 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
         cb["gInputBufferIndex"] = spatialInputBufferIndex;
         cb["gOutputBufferIndex"] = spatialOutputBufferIndex;
-        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        ShadingDataLoader::setShaderData(renderData, mpVBufferPrev, cb["gShadingDataLoader"]);
         mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
         mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
         mpScene->setRaytracingShaderData(pRenderContext, mpSpatialResamplingPass->getRootVar());
         mpSpatialResamplingPass["gReservoirs"] = mpReservoirBuffer;
         mpSpatialResamplingPass["gNeighborOffsetBuffer"] = mpNeighborOffsetBuffer;
         mpSpatialResamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
-    }*/
+    }
 
     {
         PROFILE("Shading");
@@ -200,15 +208,18 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
         cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
         cb["gInputBufferIndex"] = shadeInputBufferIndex;
-
-        ShadingDataLoader::setShaderData(renderData, cb["gShadingDataLoader"]);
-        mpGBufferPass->SetShaderData(cb["gGBuffer"]);
+        ShadingDataLoader::setShaderData(renderData, mpVBufferPrev, cb["gShadingDataLoader"]);
         mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
         mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
         mpShadingPass["gReservoirs"] = mpReservoirBuffer;
         mpShadingPass["gShadingOutput"] = renderData[kOutputChannels[0].name]->asTexture();
         mpScene->setRaytracingShaderData(pRenderContext, mpShadingPass->getRootVar());
         mpShadingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
+    }
+
+    {
+        auto VBuffer = renderData["vbuffer"]->asTexture();
+        pRenderContext->copyResource(mpVBufferPrev.get(), VBuffer.get());
     }
 }
 
@@ -246,7 +257,6 @@ void ReSTIRPass::renderUI(Gui::Widgets& widget)
 void ReSTIRPass::setScene(RenderContext* pRenderContext, const Scene::SharedPtr& pScene)
 {
     mpScene = pScene;
-    mpGBufferPass = GBufferPass::Create(mpScene);
     mpSampleGenerator = SampleGenerator::create(SAMPLE_GENERATOR_UNIFORM);
 
     std::vector<uint8_t> offsets;

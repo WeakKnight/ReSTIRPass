@@ -7,6 +7,7 @@ import Experimental.Scene.Material.MaterialHelpers;
 struct ShadingDataLoader
 {
     Texture2D<PackedHitInfo> VBuffer;
+    Texture2D<PackedHitInfo> VBufferPrev;
     Texture2D<float2> motionVector;
 
     /** Returns the primary ray's direction.
@@ -27,14 +28,15 @@ struct ShadingDataLoader
         \param[out] hit HitInfo struct returned with geometry fetched from vbuffer if available. Only valid if true is returned.
         \return True if the pixel has valid data (not a background pixel). Note sd.V is always valid.
     */
-    bool loadShadingData(uint2 pixel, uint2 frameDim, const Camera camera, out ShadingData sd)
+    bool loadShadingData(uint2 pixel, uint2 frameDim, const Camera camera, Texture2D<PackedHitInfo> VBufferTex, out ShadingData sd)
     {
         sd = {};
 
         float3 rayDir = getPrimaryRayDir(pixel, frameDim, camera);
         bool valid = false;
 
-        HitInfo hit = HitInfo(VBuffer[pixel]);
+        HitInfo hit;
+        hit = HitInfo(VBufferTex[pixel]);
         if (hit.isValid() && hit.getType() == HitType::Triangle)
         {
             const TriangleHit triangleHit = hit.getTriangleHit();
@@ -51,5 +53,15 @@ struct ShadingDataLoader
 
         sd.V = -rayDir;
         return valid;
+    }
+
+    bool loadShadingData(uint2 pixel, uint2 frameDim, const Camera camera, out ShadingData sd)
+    {
+        return loadShadingData(pixel, frameDim, camera, VBuffer, sd);
+    }
+
+    bool loadShadingDataPrevFrame(uint2 pixel, uint2 frameDim, const Camera camera, out ShadingData sd)
+    {
+        return loadShadingData(pixel, frameDim, camera, VBufferPrev, sd);
     }
 };

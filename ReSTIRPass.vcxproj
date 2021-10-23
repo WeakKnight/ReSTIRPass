@@ -25,14 +25,10 @@
     <Import Project="..\..\Falcor\Falcor.props" />
   </ImportGroup>
   <ItemGroup>
-    <ClCompile Include="DepthPrePass.cpp" />
-    <ClCompile Include="GBufferPass.cpp" />
     <ClCompile Include="ReSTIRPass.cpp" />
     <ClCompile Include="ShadingDataLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DepthPrePass.h" />
-    <ClInclude Include="GBufferPass.h" />
     <ClInclude Include="Helpers.h" />
     <ClInclude Include="ReSTIRPass.h" />
     <ClInclude Include="ShadingDataLoader.h" />
@@ -43,9 +39,6 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <ShaderSource Include="DepthPass.ps.slang" />
-    <ShaderSource Include="GBufferPass.3d.slang" />
-    <ShaderSource Include="GBufferUtils.slang" />
     <ShaderSource Include="Helpers.slang" />
     <ShaderSource Include="ReSTIR.slang" />
     <ShaderSource Include="Shading.cs.slang" />

@@ -32,15 +32,16 @@ def render_graph_DefaultRenderGraph():
     loadRenderPassLibrary('WhittedRayTracer.dll')
     ReSTIRPass = createPass('ReSTIRPass')
     g.addPass(ReSTIRPass, 'ReSTIRPass')
+    VBufferRT = createPass('VBufferRT', {'samplePattern': SamplePattern.Halton, 'sampleCount': 16, 'useAlphaTest': True, 'adjustShadingNormals': True, 'forceCullMode': False, 'cull': CullMode.CullBack, 'useTraceRayInline': False})
+    g.addPass(VBufferRT, 'VBufferRT')
     AccumulatePass = createPass('AccumulatePass', {'enabled': True, 'autoReset': True, 'precisionMode': AccumulatePrecision.Single, 'subFrameCount': 0, 'maxAccumulatedFrames': 0})
     g.addPass(AccumulatePass, 'AccumulatePass')
     ToneMapper = createPass('ToneMapper', {'useSceneMetadata': True, 'exposureCompensation': 0.0, 'autoExposure': False, 'filmSpeed': 100.0, 'whiteBalance': False, 'whitePoint': 6500.0, 'operator': ToneMapOp.Aces, 'clamp': True, 'whiteMaxLuminance': 1.0, 'whiteScale': 11.199999809265137, 'fNumber': 1.0, 'shutter': 1.0, 'exposureMode': ExposureMode.AperturePriority})
     g.addPass(ToneMapper, 'ToneMapper')
-    VBufferRT = createPass('VBufferRT', {'samplePattern': SamplePattern.Halton, 'sampleCount': 16, 'useAlphaTest': True, 'adjustShadingNormals': True, 'forceCullMode': False, 'cull': CullMode.CullBack, 'useTraceRayInline': False})
-    g.addPass(VBufferRT, 'VBufferRT')
     g.addEdge('ReSTIRPass.color', 'AccumulatePass.input')
     g.addEdge('AccumulatePass.output', 'ToneMapper.src')
     g.addEdge('VBufferRT.vbuffer', 'ReSTIRPass.vbuffer')
+    g.addEdge('VBufferRT.mvec', 'ReSTIRPass.motionVecs')
     g.markOutput('ToneMapper.dst')
     return g
 

@@ -31,7 +31,6 @@
 #include "Experimental/Scene/Lights/EmissivePowerSampler.h"
 #include "Experimental/Scene/Lights/EmissiveLightSamplerType.slangh"
 #include "Utils/Sampling/SampleGenerator.h"
-#include "GBufferPass.h"
 
 using namespace Falcor; 
 
@@ -72,13 +71,12 @@ private:
     EmissiveLightSampler::SharedPtr     mpEmissiveSampler;
     EmissiveLightSamplerType            mSelectedEmissiveSampler = EmissiveLightSamplerType::Power;
 
-    GBufferPass::SharedPtr              mpGBufferPass;
-
     ComputePass::SharedPtr              mpInitialSamplingPass;
     ComputePass::SharedPtr              mpTemporalResamplingPass;
     ComputePass::SharedPtr              mpSpatialResamplingPass;
     ComputePass::SharedPtr              mpShadingPass;
 
+    Texture::SharedPtr                  mpVBufferPrev;
     Buffer::SharedPtr                   mpReservoirBuffer;
     Buffer::SharedPtr                   mpNeighborOffsetBuffer;
 

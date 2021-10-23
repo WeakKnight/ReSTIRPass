@@ -2,44 +2,18 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="ReSTIRPass.cpp" />
-    <ClCompile Include="DepthPrePass.cpp">
-      <Filter>GBufferPass</Filter>
-    </ClCompile>
-    <ClCompile Include="GBufferPass.cpp">
-      <Filter>GBufferPass</Filter>
-    </ClCompile>
     <ClCompile Include="ShadingDataLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ReSTIRPass.h" />
-    <ClInclude Include="DepthPrePass.h">
-      <Filter>GBufferPass</Filter>
-    </ClInclude>
-    <ClInclude Include="GBufferPass.h">
-      <Filter>GBufferPass</Filter>
-    </ClInclude>
     <ClInclude Include="Helpers.h" />
     <ClInclude Include="ShadingDataLoader.h" />
   </ItemGroup>
   <ItemGroup>
-    <ShaderSource Include="DepthPass.ps.slang">
-      <Filter>GBufferPass</Filter>
-    </ShaderSource>
-    <ShaderSource Include="GBufferPass.3d.slang">
-      <Filter>GBufferPass</Filter>
-    </ShaderSource>
-    <ShaderSource Include="GBufferUtils.slang">
-      <Filter>GBufferPass</Filter>
-    </ShaderSource>
     <ShaderSource Include="Shading.cs.slang" />
     <ShaderSource Include="ReSTIR.slang" />
     <ShaderSource Include="Helpers.slang" />
     <ShaderSource Include="ShadingDataLoader.slang" />
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="GBufferPass">
-      <UniqueIdentifier>{dc26d98f-ecf5-4c1a-a5cf-760a6c68fbdf}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="InitialSampling.cs.slang" />
