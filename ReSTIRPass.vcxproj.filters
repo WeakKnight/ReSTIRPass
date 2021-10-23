@@ -8,6 +8,7 @@
     <ClCompile Include="GBufferPass.cpp">
       <Filter>GBufferPass</Filter>
     </ClCompile>
+    <ClCompile Include="ShadingDataLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ReSTIRPass.h" />
@@ -18,6 +19,7 @@
       <Filter>GBufferPass</Filter>
     </ClInclude>
     <ClInclude Include="Helpers.h" />
+    <ClInclude Include="ShadingDataLoader.h" />
   </ItemGroup>
   <ItemGroup>
     <ShaderSource Include="DepthPass.ps.slang">
@@ -32,6 +34,7 @@
     <ShaderSource Include="Shading.cs.slang" />
     <ShaderSource Include="ReSTIR.slang" />
     <ShaderSource Include="Helpers.slang" />
+    <ShaderSource Include="ShadingDataLoader.slang" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="GBufferPass">

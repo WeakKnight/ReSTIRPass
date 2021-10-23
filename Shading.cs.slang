@@ -3,6 +3,7 @@ import Utils.Sampling.SampleGenerator;
 import Utils.Math.MathHelpers;
 import Utils.Color.ColorHelpers;
 import Scene.RaytracingInline;
+import Scene.HitInfo;
 import Scene.Scene;
 import Scene.Shading;
 import Experimental.Scene.Material.StandardMaterial;
@@ -13,6 +14,7 @@ import Experimental.Scene.Lights.EmissiveLightSampler;
 import ReSTIR;
 import GBufferUtils;
 import Helpers;
+import ShadingDataLoader;
 
 cbuffer CB
 {
@@ -20,6 +22,7 @@ cbuffer CB
     uint gFrameIndex;
     uint gInputBufferIndex;
     ResamplingRuntimeParameters gParams;
+    ShadingDataLoader gShadingDataLoader;
     GBuffer gGBuffer;
     EnvMapSampler gEnvMapSampler;
     EmissiveLightSampler gEmissiveLightSampler;
@@ -30,6 +33,7 @@ static struct Data
     StandardMaterial standardMaterial;
 } gData;
 
+RWTexture2D<PackedHitInfo> gVBuffer;
 RWStructuredBuffer<Reservoir> gReservoirs;
 RWTexture2D<float4> gShadingOutput;
 
@@ -45,60 +49,61 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
     
     SampleGenerator sg = SampleGenerator.create(threadIndex, gFrameIndex);
     ShadingData sd;
-    bool valid = PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd);
+    bool valid = gShadingDataLoader.loadShadingData(threadIndex, gViewportDims, gScene.camera, sd);
+    // bool valid = PrepareRenderingData(gGBuffer, threadIndex, gScene.camera.getPosition(), sd);
     if (true)
     {
         float3 posWOrigin = sd.computeNewRayOrigin();
 
-#if !_BRUTE_FORCE
-        // Reservoir Shading
-        {
-            Reservoir r = loadReservoir(gParams, gReservoirs, threadIndex, gInputBufferIndex);
-            if (isValidReservoir(r))
-            {
-                uint lightIndex = getReservoirLightIndex(r);
-                float2 lightUV = getReservoirSampleUV(r);
-                float3 Le;
+// #if !_BRUTE_FORCE
+//         // Reservoir Shading
+//         {
+//             Reservoir r = loadReservoir(gParams, gReservoirs, threadIndex, gInputBufferIndex);
+//             if (isValidReservoir(r))
+//             {
+//                 uint lightIndex = getReservoirLightIndex(r);
+//                 float2 lightUV = getReservoirSampleUV(r);
+//                 float3 Le;
 
-                RayDesc ray;
-                ray.Origin = posWOrigin;
-                ray.TMin = 0.0f;
-                if (lightIndex == EnvMapIndex)
-                {
-                    ray.Direction = gScene.envMap.toWorld(latlong_map_to_world(lightUV));
-                    ray.TMax = 1.0e38f;
+//                 RayDesc ray;
+//                 ray.Origin = posWOrigin;
+//                 ray.TMin = 0.0f;
+//                 if (lightIndex == EnvMapIndex)
+//                 {
+//                     ray.Direction = gScene.envMap.toWorld(latlong_map_to_world(lightUV));
+//                     ray.TMax = 1.0e38f;
 
-                    Le = gScene.envMap.eval(ray.Direction);
-                }
-                else
-                {
-                    EmissiveTriangle tri = gScene.lightCollection.getTriangle(lightIndex);
-                    float3 barycentric = sample_triangle(lightUV);
-                    float3 lightPos = tri.getPosition(barycentric);
-                    float3 toLight = lightPos - posWOrigin; // Unnormalized light vector
-                    const float distSqr = max(FLT_MIN, dot(toLight, toLight)); // Clamp to avoid NaNs below
-                    float distance = sqrt(distSqr);
-                    ray.Direction = toLight / distance;
-                    ray.TMax = distance - 0.001f;
+//                     Le = gScene.envMap.eval(ray.Direction);
+//                 }
+//                 else
+//                 {
+//                     EmissiveTriangle tri = gScene.lightCollection.getTriangle(lightIndex);
+//                     float3 barycentric = sample_triangle(lightUV);
+//                     float3 lightPos = tri.getPosition(barycentric);
+//                     float3 toLight = lightPos - posWOrigin; // Unnormalized light vector
+//                     const float distSqr = max(FLT_MIN, dot(toLight, toLight)); // Clamp to avoid NaNs below
+//                     float distance = sqrt(distSqr);
+//                     ray.Direction = toLight / distance;
+//                     ray.TMax = distance - 0.001f;
 
-                    float2 uv = tri.getTexCoord(barycentric);
-                    Le = gScene.getEmissive(tri.materialID, uv, gScene.materialResources[tri.materialID]);
-                }
+//                     float2 uv = tri.getTexCoord(barycentric);
+//                     Le = gScene.getEmissive(tri.materialID, uv, gScene.materialResources[tri.materialID]);
+//                 }
 
-                if (traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
-                {
-                    res += Le * gData.standardMaterial.eval(sd, ray.Direction) * getReservoirInvPdf(r);
-                }
-#if _STORE_FINAL_VISIBILITY
-                else
-                {
-                    uint pointer = reservoirPositionToPointer(gParams, threadIndex, gInputBufferIndex);
-                    gReservoirs[pointer].weightSum = 0.0f;
-                }
-#endif
-            }
-        }
-#else
+//                 if (traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
+//                 {
+//                     res += Le * gData.standardMaterial.eval(sd, ray.Direction) * getReservoirInvPdf(r);
+//                 }
+// #if _STORE_FINAL_VISIBILITY
+//                 else
+//                 {
+//                     uint pointer = reservoirPositionToPointer(gParams, threadIndex, gInputBufferIndex);
+//                     gReservoirs[pointer].weightSum = 0.0f;
+//                 }
+// #endif
+//             }
+//         }
+// #else
         // Groundtruth Shading
         {
             EnvMapSample envMapSample;
@@ -107,7 +112,7 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
                 RayDesc ray;
                 ray.Origin = posWOrigin;
                 ray.Direction = envMapSample.dir;
-                ray.TMin = 0.0f;
+                ray.TMin = 0.001f;
                 ray.TMax = 1.0e38f;
 
                 if (traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
@@ -122,15 +127,15 @@ void main(uint2 threadIndex : SV_DispatchThreadID, uint3 groupIndex: SV_GROUPID)
                 RayDesc ray;
                 ray.Origin = posWOrigin;
                 ray.Direction = lightSample.dir;
-                ray.TMin = 0.0f;
-                ray.TMax = lightSample.distance;
+                ray.TMin = 0.001f;
+                ray.TMax = lightSample.distance - 0.001f;
                 if (traceSceneVisibilityRay<1>(ray, RAY_FLAG_NONE, 0xff))
                 {
                     res += lightSample.Le * gData.standardMaterial.eval(sd, lightSample.dir) / lightSample.pdf;
                 }
             }
         }
-#endif
+// #endif
         res += sd.emissive;
     }
     else

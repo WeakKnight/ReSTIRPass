@@ -27,12 +27,28 @@
  **************************************************************************/
 #include "ReSTIRPass.h"
 #include "Helpers.h"
+#include "ShadingDataLoader.h"
+#include <RenderGraph\RenderPassHelpers.h>
 
 namespace
 {
     const char kDesc[] = "ReSTIR Pass";
-    const char kOutput[] = "output";
-    const char kMotionVector[] = "motion";
+
+    const ChannelList kInputChannels =
+    {
+        { "posW",           "",     "World-space position (xyz) and foreground flag (w)"       },
+        { "normalW",        "",     "World-space shading normal (xyz)"                         },
+        { "faceNormalW",    "",     "Face normal in world space (xyz)",                        },
+        { "mtlDiffOpacity", "",     "Material diffuse color (xyz) and opacity (w)"             },
+        { "mtlSpecRough",   "",     "Material specular color (xyz) and roughness (w)"          },
+        { "mtlEmissive",    "",     "Material emissive color (xyz)"                            },
+        { "mtlParams",      "",     "Material parameters (IoR, flags etc)"                     },
+    };
+
+    const ChannelList kOutputChannels =
+    {
+        { "color",          "",     "Output color", false, ResourceFormat::RGBA16Float},
+    };
 }
 
 // Don't remove this. it's required for hot-reload to function properly
@@ -63,8 +79,8 @@ RenderPassReflection ReSTIRPass::reflect(const CompileData& compileData)
 {
     // Define the required resources here
     RenderPassReflection reflector;
-    reflector.addOutput(kOutput, "Output").bindFlags(ResourceBindFlags::RenderTarget | ResourceBindFlags::UnorderedAccess | ResourceBindFlags::ShaderResource).format(ResourceFormat::RGBA32Float);
-    reflector.addOutput(kMotionVector, "Motion Vectors").bindFlags(ResourceBindFlags::UnorderedAccess | ResourceBindFlags::ShaderResource).format(ResourceFormat::RG32Float);
+    addRenderPassInputs(reflector, kInputChannels);
+    addRenderPassOutputs(reflector, kOutputChannels);
     return reflector;
 }
 
@@ -95,12 +111,6 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
             CreatePasses();
         }
         mpEmissiveSampler->update(pRenderContext);
-    }
-
-    {
-        PROFILE("GBuffer");
-        Texture::SharedPtr motionTexture = renderData[kMotionVector]->asTexture();
-        mpGBufferPass->Execute(pRenderContext, motionTexture);
     }
 
     uint32_t renderWidth = gpFramework->getTargetFbo()->getWidth();
@@ -134,7 +144,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
 
     mCurrentFrameOutputReservoir = shadeInputBufferIndex;
 
-    {
+   /* {
         PROFILE("Initial Sampling");
         auto cb = mpInitialSamplingPass["CB"];
         cb["gViewportDims"] = uint2(gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
@@ -186,7 +196,7 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         mpSpatialResamplingPass["gReservoirs"] = mpReservoirBuffer;
         mpSpatialResamplingPass["gNeighborOffsetBuffer"] = mpNeighborOffsetBuffer;
         mpSpatialResamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
-    }
+    }*/
 
     {
         PROFILE("Shading");
@@ -196,11 +206,13 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         cb["gParams"]["reservoirBlockRowPitch"] = reservoirBlockRowPitch;
         cb["gParams"]["reservoirArrayPitch"] = reservoirArrayPitch;
         cb["gInputBufferIndex"] = shadeInputBufferIndex;
+
+        ShadingDataLoader::setShaderData(renderData, cb["gShadingDataLoader"]);
         mpGBufferPass->SetShaderData(cb["gGBuffer"]);
         mpEnvMapSampler->setShaderData(cb["gEnvMapSampler"]);
         mpEmissiveSampler->setShaderData(cb["gEmissiveLightSampler"]);
         mpShadingPass["gReservoirs"] = mpReservoirBuffer;
-        mpShadingPass["gShadingOutput"] = renderData[kOutput]->asTexture();
+        mpShadingPass["gShadingOutput"] = renderData[kOutputChannels[0].name]->asTexture();
         mpScene->setRaytracingShaderData(pRenderContext, mpShadingPass->getRootVar());
         mpShadingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
