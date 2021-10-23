@@ -10,7 +10,7 @@ After building this pass, you can load the render graph scripts under the projec
 ![render-graph-files](images/rendergraph.jpg)
 ## Limitation
 
-> I only used Falcor Light Sampler, including a hierarchical environment map sampler(see [EnvMapSampler](https://github.com/NVIDIAGameWorks/Falcor/blob/5236495554f57a734cc815522d95ae9a7dfe458a/Source/Falcor/Experimental/Scene/Lights/EnvMapSampler.slang)) and an Alias-Method power-based emissive triangle sampler(see [EmissivePowerSampler](https://github.com/NVIDIAGameWorks/Falcor/blob/5236495554f57a734cc815522d95ae9a7dfe458a/Source/Falcor/Experimental/Scene/Lights/EmissivePowerSampler.slang)). If you want to support more light types(such as point light, directional light) or more efficient light sampling techniques, you need to implement corresponding light samplers as initial sampling primitives.
+> I only used Falcor Light Sampler, including a hierarchical environment map sampler(see [EnvMapSampler](https://github.com/NVIDIAGameWorks/Falcor/blob/5236495554f57a734cc815522d95ae9a7dfe458a/Source/Falcor/Experimental/Scene/Lights/EnvMapSampler.slang)) and an [Alias-Method](http://cgi.cs.mcgill.ca/~enewel3/posts/alias-method/index.html) power-based emissive triangle sampler(see [EmissivePowerSampler](https://github.com/NVIDIAGameWorks/Falcor/blob/5236495554f57a734cc815522d95ae9a7dfe458a/Source/Falcor/Experimental/Scene/Lights/EmissivePowerSampler.slang)). If you want to support more light types(such as point light, directional light) or more efficient light sampling techniques, you need to implement corresponding light samplers as initial sampling primitives.
 
 > For simplicity, I used VBuffer instead of GBuffer, but VBuffer may lead to more computation overhead.
 
