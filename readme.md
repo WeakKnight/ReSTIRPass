@@ -16,4 +16,4 @@ After building this pass, you can load the render graph scripts under project fo
 
 > I did not do tricks like Pre-Sampling, De-Coupled Shading. If you want to improve memory efficiency, you need implement this kind of things by yourself
 
-> I only implemented spatial resampling debias. You need implement temporal debias by your self.
+> I only implemented spatial resampling debias. You need implement temporal debias by yourself.
