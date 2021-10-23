@@ -7,7 +7,7 @@ a falcor render-pass for ReSTIR Direct Lighting
 Add this project into Falcor solution just like other render-passes.
 ![file-tree-layout](images/layout.png)
 After building this pass, you can load the render graph scripts under project folder via Mogwai.
-![file-tree-layout](images/rendergraph.jpg)
+![render-graph-files](images/rendergraph.jpg)
 ## Limitation
 
 > I only used Falcor Light Sampler, a hierarchical envmap sampler(see EnvMapSampler) and a Alias-Method power based emissive triangle sampler(see EmissivePowerSampler). If you want to support more light types(such as point light, directional light) or more efficient light sampling technique, you need to implement corresponding light sampler as a initial sampling primitive.
