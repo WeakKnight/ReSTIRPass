@@ -6,13 +6,8 @@ import Experimental.Scene.Material.MaterialHelpers;
 
 struct ShadingDataLoader
 {
-    Texture2D<float4> worldPosition;
-    Texture2D<float4> worldShadingNormal;
-    Texture2D<float4> worldFaceNormal;
-    Texture2D<float4> materialDiffuseOpacity;
-    Texture2D<float4> materialSpecularRoughness;
-    Texture2D<float4> materialEmissive;
-    Texture2D<float4> materialExtraParams;
+    Texture2D<PackedHitInfo> VBuffer;
+    Texture2D<float2> motionVector;
 
     /** Returns the primary ray's direction.
     */
@@ -39,22 +34,18 @@ struct ShadingDataLoader
         float3 rayDir = getPrimaryRayDir(pixel, frameDim, camera);
         bool valid = false;
 
-        float4 worldPos = worldPosition[pixel];
-        if (worldPos.w != 0.f) // Using w to indicate valid geometry for now.
+        HitInfo hit = HitInfo(VBuffer[pixel]);
+        if (hit.isValid() && hit.getType() == HitType::Triangle)
         {
-            // Load geometry and material parameters from G-buffer.
-            float3 normal = worldShadingNormal[pixel].xyz;
-            float4 tangent = float4(perp_stark(normal), 1.f);
-            float3 faceNormal = worldFaceNormal[pixel].xyz;
-            GeometryParams geoParams = prepareGeometryParams(worldPos.xyz, -rayDir, normal, tangent, faceNormal);
+            const TriangleHit triangleHit = hit.getTriangleHit();
+            // Evaluate Falcor's material parameters at the hit point.
+            // TODO: Implement texLOD to enable texture filtering in prepareShadingData().
+            const VertexData v = gScene.getVertexData(triangleHit);
+            const uint materialID = gScene.getMaterialID(triangleHit.instanceID);
+            sd = prepareShadingData(v, materialID, gScene.materials[materialID], gScene.materialResources[materialID], -rayDir, 0.f);
 
-            MaterialParams matParams;
-            matParams.diffuseOpacity = materialDiffuseOpacity[pixel];
-            matParams.specularRoughness = materialSpecularRoughness[pixel];
-            matParams.emissive = materialEmissive[pixel];
-            matParams.extraParams = materialExtraParams[pixel];
-
-            sd = prepareShadingData(geoParams, matParams);
+            // Adjust shading normals if GBuffer pass has flag enabled.
+            adjustShadingNormal(sd, v);
             valid = true;
         }
 

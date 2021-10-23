@@ -36,18 +36,12 @@ namespace
 
     const ChannelList kInputChannels =
     {
-        { "posW",           "",     "World-space position (xyz) and foreground flag (w)"       },
-        { "normalW",        "",     "World-space shading normal (xyz)"                         },
-        { "faceNormalW",    "",     "Face normal in world space (xyz)",                        },
-        { "mtlDiffOpacity", "",     "Material diffuse color (xyz) and opacity (w)"             },
-        { "mtlSpecRough",   "",     "Material specular color (xyz) and roughness (w)"          },
-        { "mtlEmissive",    "",     "Material emissive color (xyz)"                            },
-        { "mtlParams",      "",     "Material parameters (IoR, flags etc)"                     },
+        { "vbuffer",    "",     "Visibility buffer in packed format",  false /* optional */, HitInfo::kDefaultFormat },
     };
 
     const ChannelList kOutputChannels =
     {
-        { "color",          "",     "Output color", false, ResourceFormat::RGBA16Float},
+        { "color",      "",     "Output color", false, ResourceFormat::RGBA16Float},
     };
 }
 
