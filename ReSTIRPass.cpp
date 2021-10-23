@@ -44,6 +44,10 @@ namespace
     {
         { "color",      "",     "Output color", false, ResourceFormat::RGBA16Float},
     };
+
+    const char kEnableTemporalResampling[] = "enableTemporalResampling";
+    const char kEnableSpatialResampling[] = "enableSpatialResampling";
+    const char kStoreFinalVisibility[] = "storeFinalVisibility";
 }
 
 // Don't remove this. it's required for hot-reload to function properly
@@ -60,6 +64,13 @@ extern "C" __declspec(dllexport) void getPasses(Falcor::RenderPassLibrary& lib)
 ReSTIRPass::SharedPtr ReSTIRPass::create(RenderContext* pRenderContext, const Dictionary& dict)
 {
     SharedPtr pPass = SharedPtr(new ReSTIRPass);
+    for (const auto& [key, value] : dict)
+    {
+        if (key == kEnableTemporalResampling) pPass->mEnableTemporalResampling = value;
+        else if (key == kEnableSpatialResampling) pPass->mEnableSpatialResampling = value;
+        else if (key == kStoreFinalVisibility) pPass->mStoreFinalVisibility = value;
+        else logWarning("Unknown field '" + key + "' in SVGFPass dictionary");
+    }
     return pPass;
 }
 
@@ -67,7 +78,11 @@ std::string ReSTIRPass::getDesc() { return kDesc; }
 
 Dictionary ReSTIRPass::getScriptingDictionary()
 {
-    return Dictionary();
+    Dictionary dict;
+    dict[kEnableTemporalResampling] = mEnableTemporalResampling;
+    dict[kEnableSpatialResampling] = mEnableSpatialResampling;
+    dict[kStoreFinalVisibility] = mStoreFinalVisibility;
+    return dict;
 }
 
 RenderPassReflection ReSTIRPass::reflect(const CompileData& compileData)
@@ -180,7 +195,6 @@ void ReSTIRPass::execute(RenderContext* pRenderContext, const RenderData& render
         mpTemporalResamplingPass->execute(pRenderContext, gpFramework->getTargetFbo()->getWidth(), gpFramework->getTargetFbo()->getHeight());
     }
 
-    
     if (mEnableSpatialResampling)
     {
         PROFILE("Spatial Resampling");
