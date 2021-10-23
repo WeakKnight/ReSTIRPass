@@ -5,7 +5,7 @@ a falcor render-pass for ReSTIR Direct Lighting
 ## How to use
 
 Add this project into Falcor solution just like other render-passes.  
-![file-tree-layout](images/layout.png)
+![file-tree-layout](images/layout.png)  
 After building this pass, you can load the render graph scripts under project folder via Mogwai.  
 ![render-graph-files](images/rendergraph.jpg)
 ## Limitation
