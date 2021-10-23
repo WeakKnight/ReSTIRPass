@@ -307,10 +307,6 @@ void ReSTIRPass::CreatePasses()
     defines.add(mpSampleGenerator->getDefines());
     defines.add("_MS_DISABLE_ALPHA_TEST");
     defines.add("_DEFAULT_ALPHA_TEST");
-    if (mEnablePresampling)
-    {
-        defines.add("_PRE_SAMPLING");
-    }
     if (mpEmissiveSampler)
     {
         defines.add(mpEmissiveSampler->getDefines());

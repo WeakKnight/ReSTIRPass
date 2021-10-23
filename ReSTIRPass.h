@@ -29,7 +29,6 @@
 #include "Falcor.h"
 #include "FalcorExperimental.h"
 #include "Experimental/Scene/Lights/EmissivePowerSampler.h"
-#include "Experimental/Scene/Lights/EmissiveLightSamplerType.slangh"
 #include "Utils/Sampling/SampleGenerator.h"
 
 using namespace Falcor; 
@@ -69,7 +68,6 @@ private:
     SampleGenerator::SharedPtr          mpSampleGenerator;
     EnvMapSampler::SharedPtr            mpEnvMapSampler;
     EmissiveLightSampler::SharedPtr     mpEmissiveSampler;
-    EmissiveLightSamplerType            mSelectedEmissiveSampler = EmissiveLightSamplerType::Power;
 
     ComputePass::SharedPtr              mpInitialSamplingPass;
     ComputePass::SharedPtr              mpTemporalResamplingPass;
@@ -84,11 +82,8 @@ private:
     uint                                mCurrentFrameOutputReservoir = 0;
 
     bool                                mBruteForce = false;
-
     bool                                mEnableSpatialResampling = false;
     bool                                mEnableTemporalResampling = false;
-    bool                                mEnablePresampling = true;
-
     uint                                mInitialEmissiveTriangleSamples = 4u;
     uint                                mInitialEnvMapSamples = 4u;
     bool                                mStoreFinalVisibility = true;
