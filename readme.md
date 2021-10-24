@@ -2,7 +2,7 @@
 
 ![result](images/result.png)  
 
-a [Falcor](https://github.com/NVIDIAGameWorks/Falcor) render-pass for [ReSTIR](](https://research.nvidia.com/sites/default/files/pubs/2020-07_Spatiotemporal-reservoir-resampling/ReSTIR.pdf)) Based Direct Lighting.
+a [Falcor](https://github.com/NVIDIAGameWorks/Falcor) render-pass for [ReSTIR](](https://research.nvidia.com/sites/default/files/pubs/2020-07_Spatiotemporal-reservoir-resampling/ReSTIR.pdf)) Based Direct Lighting, inspired by [RTXDI](https://developer.nvidia.com/rtxdi).
 
 ## How to use
 
