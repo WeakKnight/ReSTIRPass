@@ -49,18 +49,6 @@ uint reservoirPositionToPointer(
         + positionInBlock.x;
 }
 
-
-void setReservoirWeight(
-    ResamplingRuntimeParameters params,
-    RWStructuredBuffer<Reservoir> LightReservoirs,
-    uint2 reservoirPosition,
-    uint reservoirArrayIndex,
-    float weight)
-{
-    uint pointer = reservoirPositionToPointer(params, reservoirPosition, reservoirArrayIndex);
-    LightReservoirs[pointer].weightSum = weight;
-}
-
 void storeReservoir(
     ResamplingRuntimeParameters params,
     const Reservoir reservoir,
@@ -80,77 +68,6 @@ Reservoir loadReservoir(
 {
     uint pointer = reservoirPositionToPointer(params, reservoirPosition, reservoirArrayIndex);
     return LightReservoirs[pointer];
-}
-
-void samplePdfMipmap(
-    inout SampleGenerator rng, 
-    Texture2D<float> pdfTexture, // full mip chain starting from unnormalized sampling pdf in mip 0
-    uint2 pdfTextureSize,        // dimensions of pdfTexture at mip 0; must be 16k or less
-    out uint2 position,
-    out float pdf)
-{
-    int lastMipLevel = max(0, int(floor(log2(max(pdfTextureSize.x, pdfTextureSize.y)))) - 1);
-
-    position = 0;
-    pdf = 1.0;
-    for (int mipLevel = lastMipLevel; mipLevel >= 0; mipLevel--)
-    {
-        position *= 2;
-
-        float4 samples; // there's no version of Gather that supports mipmaps, really?
-        // samples.x = max(0, pdfTexture.mips[mipLevel][position + uint2(0, 0)].x);
-        // samples.y = max(0, pdfTexture.mips[mipLevel][position + uint2(0, 1)].x);
-        // samples.z = max(0, pdfTexture.mips[mipLevel][position + uint2(1, 0)].x);
-        // samples.w = max(0, pdfTexture.mips[mipLevel][position + uint2(1, 1)].x);
-
-        samples.x = max(0, pdfTexture.Load(int3(position + uint2(0, 0), mipLevel)).x);
-        samples.y = max(0, pdfTexture.Load(int3(position + uint2(0, 1), mipLevel)).x);
-        samples.z = max(0, pdfTexture.Load(int3(position + uint2(1, 0), mipLevel)).x);
-        samples.w = max(0, pdfTexture.Load(int3(position + uint2(1, 1), mipLevel)).x);
-
-        float weightSum = samples.x + samples.y + samples.z + samples.w;
-        if (weightSum <= 0)
-        {
-            pdf = 0;
-            return;
-        }
-
-        samples /= weightSum;
-
-        float rnd = sampleNext1D(rng);
-        
-        int2 selectedOffset;
-
-        if (rnd < samples.x)
-        { 
-            pdf *= samples.x;
-        }
-        else
-        {
-            rnd -= samples.x;
-            
-            if (rnd < samples.y)
-            {
-                position += uint2(0, 1);
-                pdf *= samples.y;
-            }
-            else
-            {
-                rnd -= samples.y;
-
-                if (rnd < samples.z)
-                {
-                    position += uint2(1, 0);
-                    pdf *= samples.z;
-                }
-                else
-                {
-                    position += uint2(1, 1);
-                    pdf *= samples.w;
-                }
-            }
-        }
-    }
 }
 
 Reservoir emptyReservoir()
